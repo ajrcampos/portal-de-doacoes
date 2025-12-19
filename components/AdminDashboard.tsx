@@ -52,18 +52,44 @@ const CampaignsTab: React.FC = () => {
   const { campaigns, addCampaign, updateCampaign } = useApp();
   const [isEditing, setIsEditing] = useState(false);
   const [form, setForm] = useState<Partial<Campaign>>({
-    active: true, isRecurring: false, hasPreparation: false
+    active: true, isrecurring: false, haspreparation: false
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (form.id) {
-      updateCampaign(form as Campaign);
-    } else {
-      addCampaign({ ...form, id: Date.now().toString() } as Campaign);
+
+    const payload: Omit<Campaign, 'id'> = {
+        title: form.title || '',
+        description: form.description || '',
+        eventdate: form.eventdate || '',
+        isrecurring: form.isrecurring || false,
+        haspreparation: form.haspreparation || false,
+        active: form.active === undefined ? true : form.active,
+        preparationdate: form.preparationdate,
+    };
+    
+    if (!payload.title || !payload.eventdate) {
+        alert("Título e Data do Evento são campos obrigatórios.");
+        return;
     }
+    
+    if (payload.haspreparation) {
+        if (!payload.preparationdate) {
+            alert("A data de preparo é obrigatória quando a opção está marcada.");
+            return;
+        }
+    } else {
+        payload.preparationdate = undefined;
+    }
+
+    if (form.id) {
+      await updateCampaign({ id: form.id, ...payload });
+    } else {
+      await addCampaign(payload);
+    }
+
     setIsEditing(false);
-    setForm({ active: true, isRecurring: false, hasPreparation: false });
+    setForm({ active: true, isrecurring: false, haspreparation: false });
   };
 
   const handleEdit = (c: Campaign) => {
@@ -97,7 +123,7 @@ const CampaignsTab: React.FC = () => {
                 {campaigns.map(c => (
                   <tr key={c.id}>
                     <td className="px-4 py-3 text-sm text-slate-900">{c.title}</td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{c.eventDate}</td>
+                    <td className="px-4 py-3 text-sm text-slate-600">{c.eventdate}</td>
                     <td className="px-4 py-3 text-sm">
                       <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${c.active ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-800'}`}>
                         {c.active ? 'Ativa' : 'Inativa'}
@@ -129,15 +155,15 @@ const CampaignsTab: React.FC = () => {
               label="Data do Evento" 
               type="date" 
               required 
-              value={form.eventDate || ''} 
-              onChange={e => setForm({...form, eventDate: e.target.value})} 
+              value={form.eventdate || ''} 
+              onChange={e => setForm({...form, eventdate: e.target.value})} 
             />
              <div className="flex items-center pt-6 gap-2">
                 <input 
                   type="checkbox" 
                   id="recurring"
-                  checked={form.isRecurring || false} 
-                  onChange={e => setForm({...form, isRecurring: e.target.checked})} 
+                  checked={form.isrecurring || false} 
+                  onChange={e => setForm({...form, isrecurring: e.target.checked})} 
                 />
                 <label htmlFor="recurring" className="text-sm text-slate-700">Evento Recorrente</label>
             </div>
@@ -148,17 +174,17 @@ const CampaignsTab: React.FC = () => {
                 <input 
                   type="checkbox" 
                   id="prep"
-                  checked={form.hasPreparation || false} 
-                  onChange={e => setForm({...form, hasPreparation: e.target.checked})} 
+                  checked={form.haspreparation || false} 
+                  onChange={e => setForm({...form, haspreparation: e.target.checked})} 
                 />
                 <label htmlFor="prep" className="text-sm font-medium text-slate-700">Possui Preparo Antecipado</label>
             </div>
-            {form.hasPreparation && (
+            {form.haspreparation && (
               <Input 
                 label="Data do Preparo" 
                 type="date" 
-                value={form.preparationDate || ''} 
-                onChange={e => setForm({...form, preparationDate: e.target.value})} 
+                value={form.preparationdate || ''} 
+                onChange={e => setForm({...form, preparationdate: e.target.value})} 
               />
             )}
           </div>
@@ -203,31 +229,27 @@ const NeedsTab: React.FC = () => {
 
   const activeCampaigns = campaigns; // Can add inactive items too
 
-  const handleAddItem = (e: React.FormEvent) => {
+  const handleAddItem = async (e: React.FormEvent) => {
     e.preventDefault();
     if(!selectedCampaign) return alert('Selecione uma campanha');
-    addItemNeed({
-      id: Date.now().toString(),
-      campaignId: selectedCampaign,
+    await addItemNeed({
+      campaignid: selectedCampaign,
       name: itemName,
-      totalRequired: Number(itemQty),
-      totalDonated: 0
+      totalrequired: Number(itemQty),
     });
     setItemName(''); setItemQty(''); alert('Item adicionado!');
   };
 
-  const handleAddVolunteer = (e: React.FormEvent) => {
+  const handleAddVolunteer = async (e: React.FormEvent) => {
     e.preventDefault();
     if(!selectedCampaign) return alert('Selecione uma campanha');
-    addVolunteerNeed({
-      id: Date.now().toString(),
-      campaignId: selectedCampaign,
+    await addVolunteerNeed({
+      campaignid: selectedCampaign,
       role,
       date: volDate,
-      startTime,
-      endTime,
-      totalRequired: Number(volQty),
-      totalFilled: 0
+      starttime: startTime,
+      endtime: endTime,
+      totalrequired: Number(volQty),
     });
     setRole(''); setVolDate(''); setStartTime(''); setEndTime(''); setVolQty(''); alert('Necessidade adicionada!');
   };
@@ -307,22 +329,22 @@ const ReportsTab: React.FC = () => {
   const [reportCampaignId, setReportCampaignId] = useState(campaigns[0]?.id || '');
 
   const selectedCampaign = campaigns.find(c => c.id === reportCampaignId);
-  const campaignItems = items.filter(i => i.campaignId === reportCampaignId);
-  const campaignVols = volunteerNeeds.filter(v => v.campaignId === reportCampaignId);
-  const campaignDonations = donations.filter(d => d.campaignId === reportCampaignId);
-  const campaignVolunteerings = volunteerings.filter(v => v.campaignId === reportCampaignId);
+  const campaignItems = items.filter(i => i.campaignid === reportCampaignId);
+  const campaignVols = volunteerNeeds.filter(v => v.campaignid === reportCampaignId);
+  const campaignDonations = donations.filter(d => d.campaignid === reportCampaignId);
+  const campaignVolunteerings = volunteerings.filter(v => v.campaignid === reportCampaignId);
 
   // Data for Chart
   const itemChartData = campaignItems.map(i => ({
     name: i.name,
-    Arrecadado: i.totalDonated,
-    Meta: i.totalRequired
+    Arrecadado: i.totaldonated,
+    Meta: i.totalrequired
   }));
 
   const volChartData = campaignVols.map(v => ({
     name: v.role,
-    Inscritos: v.totalFilled,
-    Vagas: v.totalRequired
+    Inscritos: v.totalfilled,
+    Vagas: v.totalrequired
   }));
 
   const exportData = () => {
@@ -331,12 +353,12 @@ const ReportsTab: React.FC = () => {
     // Simple CSV construction
     const headers = ['Tipo', 'Item/Funcao', 'Doador/Voluntario', 'Quantidade', 'Data'];
     const donationRows = donations
-      .filter(d => d.campaignId === reportCampaignId)
-      .map(d => `Doação,${d.itemName},${d.donorName},${d.quantity},${d.date}`);
+      .filter(d => d.campaignid === reportCampaignId)
+      .map(d => `Doação,${d.itemname},${d.donorname},${d.quantity},${d.date}`);
     
     const volunteerRows = volunteerings
-      .filter(v => v.campaignId === reportCampaignId)
-      .map(v => `Voluntariado,${v.role},${v.volunteerName},1,${v.date}`);
+      .filter(v => v.campaignid === reportCampaignId)
+      .map(v => `Voluntariado,${v.role},${v.volunteername},1,${v.date}`);
 
     const csvContent = "data:text/csv;charset=utf-8," 
       + [headers.join(','), ...donationRows, ...volunteerRows].join('\n');
@@ -425,8 +447,8 @@ const ReportsTab: React.FC = () => {
                             {campaignDonations.length > 0 ? (
                                 campaignDonations.map(d => (
                                     <tr key={d.id}>
-                                        <td className="px-3 py-2">{d.itemName}</td>
-                                        <td className="px-3 py-2">{d.donorName}</td>
+                                        <td className="px-3 py-2">{d.itemname}</td>
+                                        <td className="px-3 py-2">{d.donorname}</td>
                                         <td className="px-3 py-2">{d.quantity}</td>
                                         <td className="px-3 py-2">{new Date(d.date).toLocaleDateString('pt-BR')}</td>
                                     </tr>
@@ -455,7 +477,7 @@ const ReportsTab: React.FC = () => {
                                 campaignVolunteerings.map(v => (
                                     <tr key={v.id}>
                                         <td className="px-3 py-2">{v.role}</td>
-                                        <td className="px-3 py-2">{v.volunteerName}</td>
+                                        <td className="px-3 py-2">{v.volunteername}</td>
                                         <td className="px-3 py-2">{new Date(v.date).toLocaleDateString('pt-BR')}</td>
                                     </tr>
                                 ))
@@ -474,47 +496,20 @@ const ReportsTab: React.FC = () => {
 };
 
 const UsersTab: React.FC = () => {
-  const { admins, createAdmin } = useApp();
-  const [newUser, setNewUser] = useState('');
-  const [newPass, setNewPass] = useState('');
-
-  const handleCreate = (e: React.FormEvent) => {
-    e.preventDefault();
-    if(newUser && newPass) {
-      createAdmin(newUser, newPass);
-      setNewUser(''); setNewPass('');
-      alert('Administrador criado com sucesso.');
-    }
-  };
-
   return (
     <div className="max-w-2xl">
       <h3 className="text-xl font-semibold text-slate-700 mb-6">Gerenciar Administradores</h3>
       
-      <div className="mb-8 bg-slate-50 p-6 rounded border">
-        <h4 className="font-medium mb-4">Adicionar Novo Admin</h4>
-        <form onSubmit={handleCreate} className="flex gap-4 items-end">
-          <div className="flex-1">
-            <Input label="Usuário" value={newUser} onChange={e => setNewUser(e.target.value)} required />
-          </div>
-          <div className="flex-1">
-            <Input label="Senha" type="password" value={newPass} onChange={e => setNewPass(e.target.value)} required />
-          </div>
-          <Button type="submit">Adicionar</Button>
-        </form>
-      </div>
-
-      <div>
-        <h4 className="font-medium mb-2">Administradores Atuais</h4>
-        <ul className="bg-white border rounded divide-y">
-          {admins.map((admin, idx) => (
-            <li key={idx} className="p-3 text-slate-700 flex justify-between">
-              <span>{admin.username}</span>
-              <span className="text-xs text-slate-400 uppercase">Admin</span>
-            </li>
-          ))}
-        </ul>
-      </div>
+       <div className="bg-amber-50 p-4 rounded-md border border-amber-200">
+         <h4 className="font-bold text-amber-900 mb-2">Gerenciamento no Supabase</h4>
+         <p className="text-sm text-amber-800">
+           A adição, remoção e gerenciamento de senhas de administradores são feitos diretamente no seu painel Supabase para maior segurança.
+         </p>
+         <ul className="text-sm text-amber-800 list-disc list-inside mt-2 space-y-1">
+            <li><b>Para adicionar:</b> Vá para a seção "Authentication" no seu projeto e clique em "Add user".</li>
+            <li><b>Para remover:</b> Encontre o usuário na lista e selecione a opção de exclusão.</li>
+         </ul>
+       </div>
     </div>
   );
 };

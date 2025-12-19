@@ -6,11 +6,13 @@ import { CampaignDetail } from './components/CampaignDetail';
 import { AdminLogin } from './components/AdminLogin';
 import { AdminDashboard } from './components/AdminDashboard';
 import { ViewState, Campaign } from './types';
+import { isSupabaseConfigured } from './lib/supabaseClient';
+import { ConfigurationError } from './components/ConfigurationError';
 
 const AppContent: React.FC = () => {
   const [currentView, setCurrentView] = useState<ViewState>(ViewState.HOME);
   const [selectedCampaign, setSelectedCampaign] = useState<Campaign | null>(null);
-  const { isAdminAuthenticated } = useApp();
+  const { isAdminAuthenticated, loading } = useApp();
 
   const handleCampaignSelect = (campaign: Campaign) => {
     setSelectedCampaign(campaign);
@@ -26,32 +28,45 @@ const AppContent: React.FC = () => {
     }
   };
 
-  return (
-    <div className="min-h-screen flex flex-col bg-slate-50 font-sans text-slate-900">
-      <Header onNavigate={navigateTo} currentView={currentView} />
-      
-      <main className="flex-grow">
-        {currentView === ViewState.HOME && (
-          <PublicCampaignList onSelectCampaign={handleCampaignSelect} />
-        )}
-        
-        {currentView === ViewState.CAMPAIGN_DETAIL && selectedCampaign && (
+  const renderContent = () => {
+    if (loading) {
+      return (
+        <div className="flex-grow flex items-center justify-center">
+          <p className="text-xl text-slate-500">Carregando dados...</p>
+        </div>
+      );
+    }
+
+    switch (currentView) {
+      case ViewState.HOME:
+        return <PublicCampaignList onSelectCampaign={handleCampaignSelect} />;
+      case ViewState.CAMPAIGN_DETAIL:
+        return selectedCampaign ? (
           <CampaignDetail 
             campaign={selectedCampaign} 
             onBack={() => navigateTo(ViewState.HOME)} 
           />
-        )}
-
-        {currentView === ViewState.ADMIN_LOGIN && (
+        ) : null;
+      case ViewState.ADMIN_LOGIN:
+        return (
           <AdminLogin 
             onSuccess={() => setCurrentView(ViewState.ADMIN_DASHBOARD)} 
             onCancel={() => setCurrentView(ViewState.HOME)} 
           />
-        )}
+        );
+      case ViewState.ADMIN_DASHBOARD:
+        return isAdminAuthenticated ? <AdminDashboard /> : <AdminLogin onSuccess={() => {}} onCancel={() => navigateTo(ViewState.HOME)} />;
+      default:
+        return <PublicCampaignList onSelectCampaign={handleCampaignSelect} />;
+    }
+  };
 
-        {currentView === ViewState.ADMIN_DASHBOARD && (
-          <AdminDashboard />
-        )}
+  return (
+    <div className="min-h-screen flex flex-col bg-slate-50 font-sans text-slate-900">
+      <Header onNavigate={navigateTo} currentView={currentView} />
+      
+      <main className="flex-grow flex flex-col">
+        {renderContent()}
       </main>
 
       <footer className="bg-slate-200 py-6 text-center text-slate-500 text-sm">
@@ -61,12 +76,18 @@ const AppContent: React.FC = () => {
   );
 };
 
-const App: React.FC = () => {
+function App() {
+  // Se a chave do Supabase não estiver configurada, mostra uma tela de erro útil.
+  if (!isSupabaseConfigured) {
+    return <ConfigurationError />;
+  }
+
+  // Se estiver tudo certo, renderiza a aplicação.
   return (
     <AppProvider>
       <AppContent />
     </AppProvider>
   );
-};
+}
 
 export default App;

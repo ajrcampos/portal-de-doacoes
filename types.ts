@@ -2,30 +2,30 @@ export interface Campaign {
   id: string;
   title: string;
   description: string;
-  eventDate: string;
-  isRecurring: boolean;
-  hasPreparation: boolean;
-  preparationDate?: string;
+  eventdate: string;
+  isrecurring: boolean;
+  haspreparation: boolean;
+  preparationdate?: string;
   active: boolean;
 }
 
 export interface ItemNeed {
   id: string;
-  campaignId: string;
+  campaignid: string;
   name: string;
-  totalRequired: number;
-  totalDonated: number;
+  totalrequired: number;
+  totaldonated: number;
 }
 
 export interface VolunteerNeed {
   id: string;
-  campaignId: string;
+  campaignid: string;
   role: string;
   date: string;
-  startTime: string;
-  endTime: string;
-  totalRequired: number;
-  totalFilled: number;
+  starttime: string;
+  endtime: string;
+  totalrequired: number;
+  totalfilled: number;
 }
 
 export interface AdminUser {
@@ -35,20 +35,20 @@ export interface AdminUser {
 
 export interface DonationRecord {
   id: string;
-  campaignId: string;
-  itemId: string;
-  itemName: string;
-  donorName: string;
+  campaignid: string;
+  itemid: string;
+  itemname: string;
+  donorname: string;
   quantity: number;
   date: string;
 }
 
 export interface VolunteerRecord {
   id: string;
-  campaignId: string;
-  needId: string;
+  campaignid: string;
+  needid: string;
   role: string;
-  volunteerName: string;
+  volunteername: string;
   date: string;
 }
 

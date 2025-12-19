@@ -1,5 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { Campaign, ItemNeed, VolunteerNeed, AdminUser, DonationRecord, VolunteerRecord } from '../types';
+import { Campaign, ItemNeed, VolunteerNeed, DonationRecord, VolunteerRecord } from '../types';
+import { supabase } from '../lib/supabaseClient';
+import { User } from '@supabase/supabase-js';
+
+// Define the return type for auth functions
+interface AuthResponse {
+  success: boolean;
+  error?: string | null;
+}
 
 interface AppContextType {
   campaigns: Campaign[];
@@ -7,122 +15,248 @@ interface AppContextType {
   volunteerNeeds: VolunteerNeed[];
   donations: DonationRecord[];
   volunteerings: VolunteerRecord[];
-  admins: AdminUser[];
   isAdminAuthenticated: boolean;
+  loading: boolean;
   
   // Actions
-  addCampaign: (c: Campaign) => void;
-  updateCampaign: (c: Campaign) => void;
-  addItemNeed: (i: ItemNeed) => void;
-  addVolunteerNeed: (v: VolunteerNeed) => void;
-  registerDonation: (d: DonationRecord) => void;
-  registerVolunteering: (v: VolunteerRecord) => void;
-  login: (u: string, p: string) => boolean;
-  logout: () => void;
-  createAdmin: (u: string, p: string) => void;
+  addCampaign: (c: Omit<Campaign, 'id'>) => Promise<void>;
+  updateCampaign: (c: Campaign) => Promise<void>;
+  addItemNeed: (i: Omit<ItemNeed, 'id' | 'totaldonated'>) => Promise<void>;
+  addVolunteerNeed: (v: Omit<VolunteerNeed, 'id' | 'totalfilled'>) => Promise<void>;
+  registerDonation: (d: Omit<DonationRecord, 'id'>) => Promise<void>;
+  registerVolunteering: (v: Omit<VolunteerRecord, 'id'>) => Promise<void>;
+  login: (email: string, p: string) => Promise<AuthResponse>;
+  logout: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-// Initial Data
-const INITIAL_ADMINS: AdminUser[] = [
-  { username: 'iradmin', password: 'IRADMIN' }
-];
-
-const INITIAL_CAMPAIGNS: Campaign[] = [
-  {
-    id: '1',
-    title: 'Campanha do Quilo - Setembro',
-    description: 'Arrecadação de alimentos não perecíveis para famílias assistidas.',
-    eventDate: '2023-09-20',
-    isRecurring: true,
-    hasPreparation: false,
-    active: true,
-  },
-  {
-    id: '2',
-    title: 'Sopa Fraterna',
-    description: 'Distribuição de sopa para moradores em situação de rua.',
-    eventDate: '2023-09-22',
-    isRecurring: true,
-    hasPreparation: true,
-    preparationDate: '2023-09-22',
-    active: true,
-  }
-];
-
-const INITIAL_ITEMS: ItemNeed[] = [
-  { id: '101', campaignId: '1', name: 'Arroz (kg)', totalRequired: 50, totalDonated: 12 },
-  { id: '102', campaignId: '1', name: 'Feijão (kg)', totalRequired: 30, totalDonated: 5 },
-  { id: '201', campaignId: '2', name: 'Legumes Variados (kg)', totalRequired: 20, totalDonated: 20 },
-  { id: '202', campaignId: '2', name: 'Pão (un)', totalRequired: 100, totalDonated: 0 },
-];
-
-const INITIAL_VOLUNTEERS: VolunteerNeed[] = [
-  { id: 'v1', campaignId: '1', role: 'Coleta e Triagem', date: '2023-09-20', startTime: '08:00', endTime: '12:00', totalRequired: 10, totalFilled: 3 },
-  { id: 'v2', campaignId: '2', role: 'Cozinha', date: '2023-09-22', startTime: '14:00', endTime: '18:00', totalRequired: 5, totalFilled: 5 },
-  { id: 'v3', campaignId: '2', role: 'Distribuição', date: '2023-09-22', startTime: '19:00', endTime: '21:00', totalRequired: 8, totalFilled: 1 },
-];
-
 export const AppProvider = ({ children }: { children: ReactNode }) => {
-  const [campaigns, setCampaigns] = useState<Campaign[]>(INITIAL_CAMPAIGNS);
-  const [items, setItems] = useState<ItemNeed[]>(INITIAL_ITEMS);
-  const [volunteerNeeds, setVolunteerNeeds] = useState<VolunteerNeed[]>(INITIAL_VOLUNTEERS);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [items, setItems] = useState<ItemNeed[]>([]);
+  const [volunteerNeeds, setVolunteerNeeds] = useState<VolunteerNeed[]>([]);
   const [donations, setDonations] = useState<DonationRecord[]>([]);
   const [volunteerings, setVolunteerings] = useState<VolunteerRecord[]>([]);
-  const [admins, setAdmins] = useState<AdminUser[]>(INITIAL_ADMINS);
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const addCampaign = (c: Campaign) => setCampaigns([...campaigns, c]);
-  
-  const updateCampaign = (updated: Campaign) => {
-    setCampaigns(campaigns.map(c => c.id === updated.id ? updated : c));
+  const getTableNameFromContext = (context: string): string => {
+    if (context.includes('campanha')) return 'campaigns';
+    if (context.includes('item')) return 'items';
+    if (context.includes('vaga de voluntário')) return 'volunteer_needs';
+    if (context.includes('doação')) return 'donations';
+    if (context.includes('voluntariado')) return 'volunteerings';
+    return '[tabela correspondente]';
   };
 
-  const addItemNeed = (i: ItemNeed) => setItems([...items, i]);
-  
-  const addVolunteerNeed = (v: VolunteerNeed) => setVolunteerNeeds([...volunteerNeeds, v]);
+  // Centralized, robust error handler
+  const handleSupabaseError = (error: any, context: string) => {
+    // Log the raw error object for developers who need deep inspection
+    console.debug(`Raw error object for context [${context}]:`, error);
+    if (!error) return;
 
-  const registerDonation = (d: DonationRecord) => {
-    setDonations([...donations, d]);
-    setItems(items.map(i => {
-      if (i.id === d.itemId) {
-        return { ...i, totalDonated: i.totalDonated + d.quantity };
-      }
-      return i;
-    }));
-  };
+    let errorMessage = 'Ocorreu um erro desconhecido.';
+    let isRLSError = false;
 
-  const registerVolunteering = (v: VolunteerRecord) => {
-    setVolunteerings([...volunteerings, v]);
-    setVolunteerNeeds(needs => needs.map(n => {
-      if (n.id === v.needId) {
-        return { ...n, totalFilled: n.totalFilled + 1 };
-      }
-      return n;
-    }));
-  };
-
-  const login = (u: string, p: string) => {
-    const admin = admins.find(a => a.username.toLowerCase() === u.toLowerCase() && a.password === p);
-    if (admin) {
-      setIsAdminAuthenticated(true);
-      return true;
+    // --- Message Extraction Logic ---
+    if (error && typeof error.message === 'string') {
+        errorMessage = error.message;
+        if (typeof error.details === 'string' && error.details) errorMessage += `\nDetalhes: ${error.details}`;
+        if (typeof error.hint === 'string' && error.hint) errorMessage += `\nSugestão: ${error.hint}`;
+    } 
+    else if (error instanceof Error) { errorMessage = error.message; }
+    else if (typeof error === 'string') { errorMessage = error; }
+    else {
+        try {
+            const errorString = JSON.stringify(error);
+            if (errorString !== '{}') errorMessage = errorString;
+        } catch { /* use default message */ }
     }
-    return false;
+    
+    // Replace the old console.error with a more readable one
+    console.error(`Error context: [${context}] | Message: ${errorMessage.replace(/\n/g, ' ')}`);
+
+    // --- RLS Check and User-Friendly Alert ---
+    if ((error && error.code === '42501') || errorMessage.includes('violates row-level security policy')) {
+        isRLSError = true;
+    }
+
+    if (isRLSError) {
+        const tableName = getTableNameFromContext(context);
+        alert(
+`🛑 AÇÃO NECESSÁRIA: ERRO DE PERMISSÃO 🛑
+
+A operação "${context}" foi bloqueada pelo banco de dados.
+
+Isto quase sempre significa que a regra de segurança (Policy) para a tabela "${tableName}" está faltando.
+
+✅ COMO CORRIGIR:
+1. Vá para o seu painel do Supabase.
+2. Vá para: Database > Policies.
+3. Encontre a tabela "${tableName}" e clique em "New Policy".
+4. Use o template "Enable INSERT for authenticated users".
+5. Salve e tente novamente.
+
+A aplicação não pode salvar dados sem esta permissão.`
+        );
+    } else {
+        alert(`Erro ao ${context}:\n\n${errorMessage}`);
+    }
   };
 
-  const logout = () => setIsAdminAuthenticated(false);
+  useEffect(() => {
+    // Check for an active session on initial load
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setIsAdminAuthenticated(!!session);
+      fetchData(); // Fetch data after checking session
+    };
+    checkSession();
 
-  const createAdmin = (u: string, p: string) => {
-    setAdmins([...admins, { username: u, password: p }]);
+    // Listen for auth state changes
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAdminAuthenticated(!!session);
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
+  
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [
+        campaignsRes,
+        itemsRes,
+        volunteerNeedsRes,
+        donationsRes,
+        volunteeringsRes
+      ] = await Promise.all([
+        supabase.from('campaigns').select('*'),
+        supabase.from('items').select('*'),
+        supabase.from('volunteer_needs').select('*'),
+        supabase.from('donations').select('*'),
+        supabase.from('volunteerings').select('*')
+      ]);
+
+      if (campaignsRes.data) setCampaigns(campaignsRes.data);
+      if (itemsRes.data) setItems(itemsRes.data);
+      if (volunteerNeedsRes.data) setVolunteerNeeds(volunteerNeedsRes.data);
+      if (donationsRes.data) setDonations(donationsRes.data);
+      if (volunteeringsRes.data) setVolunteerings(volunteeringsRes.data);
+      
+    } catch (error) {
+      console.error("Error fetching data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const addCampaign = async (c: Omit<Campaign, 'id'>) => {
+    const { data, error } = await supabase.from('campaigns').insert(c).select().single();
+    if (error) {
+      handleSupabaseError(error, "adicionar campanha");
+      return;
+    }
+    if (data) setCampaigns(prev => [...prev, data]);
+  };
+  
+  const updateCampaign = async (updated: Campaign) => {
+    const { data, error } = await supabase.from('campaigns').update(updated).eq('id', updated.id).select().single();
+     if (error) {
+      handleSupabaseError(error, "atualizar campanha");
+      return;
+    }
+    if (data) setCampaigns(campaigns.map(c => (c.id === data.id ? data : c)));
+  };
+
+  const addItemNeed = async (i: Omit<ItemNeed, 'id' | 'totaldonated'>) => {
+    const { data, error } = await supabase.from('items').insert({ ...i, totaldonated: 0 }).select().single();
+    if (error) {
+      handleSupabaseError(error, "adicionar item necessário");
+      return;
+    }
+    if (data) setItems(prev => [...prev, data]);
+  };
+  
+  const addVolunteerNeed = async (v: Omit<VolunteerNeed, 'id' | 'totalfilled'>) => {
+    const { data, error } = await supabase.from('volunteer_needs').insert({ ...v, totalfilled: 0 }).select().single();
+    if (error) {
+      handleSupabaseError(error, "adicionar vaga de voluntário");
+      return;
+    }
+    if (data) setVolunteerNeeds(prev => [...prev, data]);
+  };
+
+  const registerDonation = async (d: Omit<DonationRecord, 'id'>) => {
+    // This should ideally be a transaction or an RPC call in Supabase for atomicity
+    const { data, error } = await supabase.from('donations').insert(d).select().single();
+    if (error || !data) {
+      handleSupabaseError(error, "registrar doação");
+      return;
+    }
+    
+    // Update local state immediately for better UX
+    setDonations(prev => [...prev, data]);
+    const originalItem = items.find(i => i.id === d.itemid);
+    if (originalItem) {
+        const newTotalDonated = originalItem.totaldonated + d.quantity;
+        setItems(items.map(i => i.id === d.itemid ? { ...i, totaldonated: newTotalDonated } : i));
+        
+        // Update the item count in the database
+        const { error: updateError } = await supabase
+          .from('items')
+          .update({ totaldonated: newTotalDonated })
+          .eq('id', d.itemid);
+        if (updateError) {
+          handleSupabaseError(updateError, "atualizar total de doações");
+          // Optionally revert local state on failure
+          setItems(items);
+          setDonations(donations);
+        }
+    }
+  };
+
+  const registerVolunteering = async (v: Omit<VolunteerRecord, 'id'>) => {
+    const { data, error } = await supabase.from('volunteerings').insert(v).select().single();
+     if (error || !data) {
+      handleSupabaseError(error, "registrar voluntariado");
+      return;
+    }
+
+    setVolunteerings(prev => [...prev, data]);
+    const originalNeed = volunteerNeeds.find(n => n.id === v.needid);
+    if(originalNeed) {
+      const newTotalFilled = originalNeed.totalfilled + 1;
+      setVolunteerNeeds(needs => needs.map(n => n.id === v.needid ? { ...n, totalfilled: newTotalFilled } : n));
+    
+      const { error: updateError } = await supabase
+        .from('volunteer_needs')
+        .update({ totalfilled: newTotalFilled })
+        .eq('id', v.needid);
+      if (updateError) handleSupabaseError(updateError, "atualizar total de voluntários");
+    }
+  };
+
+  const login = async (email: string, p: string): Promise<AuthResponse> => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password: p });
+    if (error) {
+        console.error("Login error:", error.message);
+        return { success: false, error: error.message };
+    }
+    return { success: true };
+  };
+
+  const logout = async () => {
+    await supabase.auth.signOut();
   };
 
   return (
     <AppContext.Provider value={{
-      campaigns, items, volunteerNeeds, donations, volunteerings, admins, isAdminAuthenticated,
+      campaigns, items, volunteerNeeds, donations, volunteerings, isAdminAuthenticated, loading,
       addCampaign, updateCampaign, addItemNeed, addVolunteerNeed, registerDonation, registerVolunteering,
-      login, logout, createAdmin
+      login, logout
     }}>
       {children}
     </AppContext.Provider>

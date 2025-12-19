@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Campaign, ItemNeed, VolunteerNeed } from '../types';
+import { Campaign, ItemNeed, VolunteerNeed, DonationRecord, VolunteerRecord } from '../types';
 import { useApp } from '../context/AppContext';
 import { Button } from './ui/Button';
 import { Input } from './ui/Input';
@@ -14,12 +14,12 @@ export const CampaignDetail: React.FC<Props> = ({ campaign, onBack }) => {
   const [name, setName] = useState('');
   const [activeTab, setActiveTab] = useState<'DONATE' | 'VOLUNTEER'>('DONATE');
 
-  const campaignItems = items.filter(i => i.campaignId === campaign.id);
-  const campaignNeeds = volunteerNeeds.filter(v => v.campaignId === campaign.id);
+  const campaignItems = items.filter(i => i.campaignid === campaign.id);
+  const campaignNeeds = volunteerNeeds.filter(v => v.campaignid === campaign.id);
 
   // Determine global progress
-  const totalItemReq = campaignItems.reduce((acc, i) => acc + i.totalRequired, 0);
-  const totalItemDon = campaignItems.reduce((acc, i) => acc + i.totalDonated, 0);
+  const totalItemReq = campaignItems.reduce((acc, i) => acc + i.totalrequired, 0);
+  const totalItemDon = campaignItems.reduce((acc, i) => acc + i.totaldonated, 0);
   const itemProgress = totalItemReq > 0 ? Math.min(100, (totalItemDon / totalItemReq) * 100) : 0;
 
   return (
@@ -31,8 +31,8 @@ export const CampaignDetail: React.FC<Props> = ({ campaign, onBack }) => {
           <h2 className="text-3xl font-bold mb-2">{campaign.title}</h2>
           <p className="text-brand-100">{campaign.description}</p>
           <div className="mt-4 flex gap-4 text-sm font-medium opacity-90">
-            <span>📅 Data: {new Date(campaign.eventDate).toLocaleDateString('pt-BR')}</span>
-            {campaign.hasPreparation && <span>🔨 Preparo: {new Date(campaign.preparationDate!).toLocaleDateString('pt-BR')}</span>}
+            <span>📅 Data: {new Date(campaign.eventdate).toLocaleDateString('pt-BR')}</span>
+            {campaign.haspreparation && <span>🔨 Preparo: {new Date(campaign.preparationdate!).toLocaleDateString('pt-BR')}</span>}
           </div>
         </div>
         
@@ -99,20 +99,25 @@ export const CampaignDetail: React.FC<Props> = ({ campaign, onBack }) => {
 
 // Sub-components for cards
 
-const ItemCard = ({ item, userName, onDonate }: { item: ItemNeed, userName: string, onDonate: any }) => {
-  const remaining = item.totalRequired - item.totalDonated;
+interface ItemCardProps {
+  item: ItemNeed;
+  userName: string;
+  onDonate: (donation: Omit<DonationRecord, 'id'>) => Promise<void>;
+}
+
+const ItemCard: React.FC<ItemCardProps> = ({ item, userName, onDonate }) => {
+  const remaining = item.totalrequired - item.totaldonated;
   const [qty, setQty] = useState<number>(0);
 
-  const handleDonate = () => {
+  const handleDonate = async () => {
     if (!userName) return alert('Por favor, identifique-se no topo da página.');
     if (qty <= 0 || qty > remaining) return alert('Quantidade inválida.');
     
-    onDonate({
-      id: Date.now().toString(),
-      campaignId: item.campaignId,
-      itemId: item.id,
-      itemName: item.name,
-      donorName: userName,
+    await onDonate({
+      campaignid: item.campaignid,
+      itemid: item.id,
+      itemname: item.name,
+      donorname: userName,
       quantity: qty,
       date: new Date().toISOString().split('T')[0]
     });
@@ -129,8 +134,8 @@ const ItemCard = ({ item, userName, onDonate }: { item: ItemNeed, userName: stri
         </span>
       </div>
       <div className="text-sm text-slate-600 mb-4 space-y-1">
-        <p>Meta: <span className="font-semibold">{item.totalRequired}</span></p>
-        <p>Já doado: <span className="font-semibold text-green-600">{item.totalDonated}</span></p>
+        <p>Meta: <span className="font-semibold">{item.totalrequired}</span></p>
+        <p>Já doado: <span className="font-semibold text-green-600">{item.totaldonated}</span></p>
         <p>Restante: <span className="font-semibold text-brand-600">{remaining}</span></p>
       </div>
       
@@ -156,18 +161,23 @@ const ItemCard = ({ item, userName, onDonate }: { item: ItemNeed, userName: stri
   );
 };
 
-const VolunteerCard = ({ need, userName, onVolunteer }: { need: VolunteerNeed, userName: string, onVolunteer: any }) => {
-  const remaining = need.totalRequired - need.totalFilled;
+interface VolunteerCardProps {
+  need: VolunteerNeed;
+  userName: string;
+  onVolunteer: (volunteering: Omit<VolunteerRecord, 'id'>) => Promise<void>;
+}
+
+const VolunteerCard: React.FC<VolunteerCardProps> = ({ need, userName, onVolunteer }) => {
+  const remaining = need.totalrequired - need.totalfilled;
   
-  const handleVolunteer = () => {
+  const handleVolunteer = async () => {
     if (!userName) return alert('Por favor, identifique-se no topo da página.');
     
-    onVolunteer({
-      id: Date.now().toString(),
-      campaignId: need.campaignId,
-      needId: need.id,
+    await onVolunteer({
+      campaignid: need.campaignid,
+      needid: need.id,
       role: need.role,
-      volunteerName: userName,
+      volunteername: userName,
       date: new Date().toISOString().split('T')[0]
     });
     alert('Inscrição confirmada! Aguardamos você.');
@@ -179,7 +189,7 @@ const VolunteerCard = ({ need, userName, onVolunteer }: { need: VolunteerNeed, u
         <h4 className="font-bold text-slate-800 text-lg">{need.role}</h4>
         <div className="text-sm text-slate-600 flex flex-wrap gap-4 mt-1">
           <span>📅 {new Date(need.date).toLocaleDateString('pt-BR')}</span>
-          <span>⏰ {need.startTime} - {need.endTime}</span>
+          <span>⏰ {need.starttime} - {need.endtime}</span>
           <span className={`${remaining > 0 ? 'text-brand-600' : 'text-green-600'} font-medium`}>
             {remaining > 0 ? `${remaining} vagas restantes` : 'Vagas esgotadas'}
           </span>

@@ -32,9 +32,9 @@ export const PublicCampaignList: React.FC<Props> = ({ onSelectCampaign }) => {
               <div className="p-6 flex-1 flex flex-col">
                 <div className="flex justify-between items-start mb-2">
                    <span className="text-xs font-bold text-brand-600 bg-brand-50 px-2 py-1 rounded uppercase tracking-wider">
-                     {new Date(campaign.eventDate).toLocaleDateString('pt-BR')}
+                     {new Date(campaign.eventdate).toLocaleDateString('pt-BR')}
                    </span>
-                   {campaign.isRecurring && <span className="text-xs text-slate-400" title="Recorrente">🔄</span>}
+                   {campaign.isrecurring && <span className="text-xs text-slate-400" title="Recorrente">🔄</span>}
                 </div>
                 <h3 className="text-xl font-bold text-slate-800 mb-2">{campaign.title}</h3>
                 <p className="text-slate-600 mb-6 text-sm flex-1">{campaign.description}</p>
